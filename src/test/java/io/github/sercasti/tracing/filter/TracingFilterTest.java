@@ -13,7 +13,8 @@ import javax.servlet.http.HttpServletRequest;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 
-import io.github.sercasti.tracing.filter.TracingFilter;
+import io.github.sercasti.tracing.core.Tracing;
+import io.github.sercasti.tracing.core.TracingImpl;
 
 /**
  * Unit tests for {@link TracingFilter}.
@@ -22,12 +23,14 @@ public class TracingFilterTest {
 
     @Test
     public void testDoFilter() throws IOException, ServletException {
-        final TracingFilter filter = new TracingFilter();
-        final HttpServletRequest request = mock(HttpServletRequest.class);
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        final FilterChain filterChain = mock(FilterChain.class);
+        Tracing testTracing = new TracingImpl();
+        TracingFilter filter = new TracingFilter(testTracing);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        testTracing.start("test", null).stop();
         filter.doFilterInternal(request, response, filterChain);
-        assertNull(TracingFilter.tracingLocal.get());
         assertNotNull(response.getHeader("Server-Timing"));
     }
 

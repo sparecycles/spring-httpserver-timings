@@ -5,11 +5,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
-
-import io.github.sercasti.tracing.core.Metric;
+import org.junit.jupiter.api.Assertions;
 
 /**
- * Unit tests for {@link Metric}.
+ * Unit tests for {@link TracingMetric}.
  */
 public class MetricTest {
     private static final String NAME = "John";
@@ -17,19 +16,21 @@ public class MetricTest {
     
     @Test
     public void testShouldEqualParams()  {
-        final Metric metric = new Metric(NAME, DESC);
+        final TracingMetric metric = new TracingMetric(NAME, DESC);
         assertEquals(metric.getName(), NAME);
         assertEquals(metric.getDescription(), DESC);
-        assertNotNull(metric.getStartTime());
         assertNull(metric.getDuration());
     }
     
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testShouldNotStop() {
-        final Metric metric = new Metric(NAME, DESC);
+        TracingMetric metric = new TracingMetric(NAME, DESC);
+
         metric.stop();
+
         assertNotNull(metric.getDuration());
-        metric.stop();
+
+        Assertions.assertThrows(IllegalStateException.class, metric::stop);
     }
 
 }

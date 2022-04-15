@@ -6,6 +6,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.springframework.core.annotation.AliasFor;
+
 /**
  * Interceptor annotation that can be used to add the timing (runtime) of a
  * method to the server timing that is send back to the client is a response.
@@ -16,11 +18,15 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Traceable {
+    @AliasFor(attribute = "name")
+    String value() default "";
+
     /**
      * An optional name to identify a method in the Server-Timing response header.
      * <p>
      * Helpful to avoid showing internal method names to public or to distinguish between methods with similar names.
      */
+    @AliasFor(attribute = "value")
     String name() default "";
 
     String description() default "";

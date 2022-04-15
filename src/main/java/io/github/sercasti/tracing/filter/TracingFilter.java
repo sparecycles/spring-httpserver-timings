@@ -1,95 +1,63 @@
 package io.github.sercasti.tracing.filter;
 
 import java.io.IOException;
-import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import io.github.sercasti.tracing.core.Metric;
 import io.github.sercasti.tracing.core.Tracing;
-import io.github.sercasti.tracing.core.TracingImpl;
-import io.github.sercasti.tracing.domain.HttpServletResponseCopier;
+import io.github.sercasti.tracing.core.TracingMetric;
 
-@Component
-@Order(1)
-@ConfigurationProperties(prefix = "tracing")
 public class TracingFilter extends OncePerRequestFilter {
+    public static final String SERVER_TIMING_HEADER = "Server-Timing";
 
-    static final ThreadLocal<TracingImpl> tracingLocal = new ThreadLocal<>();
+    private final Tracing tracing;
 
-    private boolean disabled = false;
-
-    public boolean isDisabled() {
-        return disabled;
+    public TracingFilter(Tracing tracing) {
+        this.tracing = tracing;
     }
 
-    public void setDisabled(boolean disabled) {
-        this.disabled = disabled;
+    private void applyTrailingServerTimings(HttpServletResponse response, TracingMetric total) {
+        Supplier<Map<String, String>> existingTrailerFieldSupplier = response.getTrailerFields();
+
+        List<TracingMetric> requestMetrics = tracing.getMetrics();
+
+        response.setTrailerFields(() -> {
+            Map<String, String> trailerFields = new HashMap<>(
+                Optional.ofNullable(existingTrailerFieldSupplier)
+                    .map(Supplier::get)
+                    .orElse(Collections.emptyMap())
+            );
+
+            if (total != null && total.getDuration() == null) {
+                total.stop();
+            }
+
+            trailerFields.put(SERVER_TIMING_HEADER, requestMetrics.stream()
+                .map(TracingMetric::toString)
+                .collect(Collectors.joining(",")));
+
+            return trailerFields;
+        });
     }
 
     @Override
-    protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response, final FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        if(disabled) {
-            filterChain.doFilter(request, response);
-        }
+        applyTrailingServerTimings(response, tracing.start("total", null));
 
-        final String chainingHeaders = request.getHeader(Tracing.SERVER_TIMING_HEADER);
-        final HttpServletResponseCopier responseWrapper = new HttpServletResponseCopier(response);
-        final TracingImpl tracing = new TracingImpl();
-        tracingLocal.set(tracing);
-        try {
-            final Metric totalMetric = tracing.start("total", "total duration of the request");
-            filterChain.doFilter(request, responseWrapper);
-            totalMetric.stop();
-        } finally {
-            responseWrapper.flushBuffer();
-            tracing.dump(response, chainingHeaders);
-            tracingLocal.set(null);
-            responseWrapper.reallyFlush();
-        }
+        filterChain.doFilter(request, response);
     }
-
-    public static Tracing getCurrentTiming() {
-        final TracingImpl timing = tracingLocal.get();
-        if (timing == null) {
-            return new Tracing() {
-                @Override
-                public Metric start(final String name, final String description) {
-                    return new Metric(name, description) {
-                        @Override
-                        public String getName() {
-                            return name;
-                        }
-
-                        @Override
-                        public String getDescription() {
-                            return description;
-                        }
-
-                        @Override
-                        public Duration getDuration() {
-                            return null;
-                        }
-
-                        @Override
-                        public void stop() throws IllegalStateException {
-
-                        }
-                    };
-                }
-            };
-        }
-        return timing;
-    }
-
 }
